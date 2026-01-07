@@ -1,0 +1,158 @@
+name: Release
+
+# Builds the macOS plugins + app, Developer ID codesigns them with a hardened
+# runtime, notarizes (notarytool) and staples a DMG, and attaches it to the
+# GitHub Release for the pushed tag.
+#
+# Required repository secrets (Settings -> Secrets and variables -> Actions):
+#   MPLUG_CI_TOKEN              PAT with read access to the private mplug repo
+#   DEVELOPER_ID_APPLICATION    "Developer ID Application: NAME (TEAMID)"
+#   BUILD_CERTIFICATE_BASE64    base64 of the Developer ID Application .p12
+#   P12_PASSWORD               password for that .p12
+#   KEYCHAIN_PASSWORD          any string; password for the temporary keychain
+#   NOTARY_KEY_BASE64          base64 of the App Store Connect API key (.p8)
+#   NOTARY_KEY_ID              the API key's Key ID
+#   NOTARY_ISSUER_ID           the API key's Issuer ID
+#
+# Create the .p12 from your "Developer ID Application" cert in Keychain Access
+# (export as .p12), then: base64 -i cert.p12 | pbcopy. Create the API key at
+# App Store Connect -> Users and Access -> Integrations -> App Store Connect API
+# (role: Developer); base64 -i AuthKey_XXXX.p8 | pbcopy.
+#
+# (notarytool also supports Apple ID + app-specific password instead of an API
+# key: --apple-id / --password / --team-id. Apple recommends the API key.)
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+# Allow the built-in GITHUB_TOKEN to create the Release and upload assets.
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    name: macOS (signed + notarized)
+    runs-on: macos-15
+    env:
+      DEVELOPER_ID_APPLICATION: ${{ secrets.DEVELOPER_ID_APPLICATION }}
+      BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+      P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+      KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+      NOTARY_KEY_BASE64: ${{ secrets.NOTARY_KEY_BASE64 }}
+      NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+      NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check signing secrets
+        run: |
+          missing=
+          for v in DEVELOPER_ID_APPLICATION BUILD_CERTIFICATE_BASE64 P12_PASSWORD \
+                   KEYCHAIN_PASSWORD NOTARY_KEY_BASE64 NOTARY_KEY_ID NOTARY_ISSUER_ID; do
+            [ -z "${!v}" ] && missing="$missing $v"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing release secrets:$missing - see release.yml header."
+            exit 1
+          fi
+
+      - name: Configure git auth for private dependencies
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git config --global --add url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "git@github.com:"
+
+      - name: Install dependencies
+        run: brew install ninja
+
+      - name: Build
+        run: |
+          cmake --preset release
+          cmake --build --preset release
+
+      - name: Import Developer ID certificate into a temporary keychain
+        run: |
+          CERT_PATH="$RUNNER_TEMP/cert.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o "$CERT_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+      - name: Codesign (Developer ID, hardened runtime)
+        run: |
+          cd build/release/out
+          # Plugins: hardened runtime + secure timestamp, no extra entitlements.
+          for plug in MyPlugin.vst3 MyPlugin.component MyPlugin.clap; do
+            codesign --force --options runtime --timestamp \
+              --sign "$DEVELOPER_ID_APPLICATION" "$plug"
+          done
+          # App: same, plus the hardened-runtime entitlements.
+          codesign --force --options runtime --timestamp \
+            --entitlements "$GITHUB_WORKSPACE/resources/entitlements.mac.plist" \
+            --sign "$DEVELOPER_ID_APPLICATION" MyPlugin.app
+          for item in MyPlugin.vst3 MyPlugin.component MyPlugin.clap MyPlugin.app; do
+            codesign --verify --strict --verbose=2 "$item"
+          done
+
+      - name: Notarize and staple the bundles
+        run: |
+          KEY_PATH="$RUNNER_TEMP/notary.p8"
+          echo -n "$NOTARY_KEY_BASE64" | base64 --decode -o "$KEY_PATH"
+          cd build/release/out
+          # notarytool needs a container, so submit all the signed bundles in one
+          # zip; then staple each original bundle (same cdhash that was notarized)
+          # so the plugins/app pass Gatekeeper offline after being copied out.
+          mkdir -p "$RUNNER_TEMP/notarize"
+          cp -R MyPlugin.vst3 MyPlugin.component MyPlugin.clap MyPlugin.app "$RUNNER_TEMP/notarize/"
+          ditto -c -k --sequesterRsrc "$RUNNER_TEMP/notarize" "$RUNNER_TEMP/bundles.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/bundles.zip" \
+            --key "$KEY_PATH" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" \
+            --wait
+          for item in MyPlugin.vst3 MyPlugin.component MyPlugin.clap MyPlugin.app; do
+            xcrun stapler staple "$item"
+          done
+
+      - name: Build, sign DMG
+        run: |
+          mkdir -p dmg-staging
+          cd build/release/out
+          cp -R MyPlugin.vst3 MyPlugin.component MyPlugin.clap MyPlugin.app "$GITHUB_WORKSPACE/dmg-staging/"
+          cd "$GITHUB_WORKSPACE"
+          hdiutil create -volname "MyPlugin" -srcfolder dmg-staging -ov -format UDZO MyPlugin-macOS.dmg
+          codesign --force --timestamp --sign "$DEVELOPER_ID_APPLICATION" MyPlugin-macOS.dmg
+
+      - name: Notarize and staple the DMG
+        run: |
+          xcrun notarytool submit MyPlugin-macOS.dmg \
+            --key "$RUNNER_TEMP/notary.p8" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" \
+            --wait
+          xcrun stapler staple MyPlugin-macOS.dmg
+          spctl --assess --type open --context context:primary-signature -v MyPlugin-macOS.dmg
+
+      - name: Clean up keychain
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db" || true
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: MyPlugin-macOS-dmg
+          path: MyPlugin-macOS.dmg
+
+      - name: Attach DMG to the GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" --generate-notes --title "${{ github.ref_name }}" || true
+          gh release upload "${{ github.ref_name }}" MyPlugin-macOS.dmg --clobber

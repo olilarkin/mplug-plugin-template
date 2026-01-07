@@ -1,0 +1,380 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+  pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # macOS — VST3 / AUv2 / CLAP / App / CLI
+  # ---------------------------------------------------------------------------
+  macos:
+    name: macOS
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+
+      # MPlug (and its mcp-ext-apps submodule) is fetched over git. Rewrite both
+      # the https and git@ forms to use the PAT so private deps and ssh-style
+      # submodules clone without SSH keys.
+      - name: Configure git auth for private dependencies
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git config --global --add url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "git@github.com:"
+
+      - name: Install dependencies
+        run: brew install ninja ccache
+
+      - uses: hendrikmuhs/ccache-action@v1.2.23
+        with:
+          key: macos
+          max-size: 2G
+
+      - name: Configure
+        run: >-
+          cmake --preset release
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DCMAKE_OBJC_COMPILER_LAUNCHER=ccache
+          -DCMAKE_OBJCXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: cmake --build --preset release
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: MyPlugin-macos
+          if-no-files-found: ignore
+          path: |
+            build/release/**/*.vst3
+            build/release/**/*.clap
+            build/release/**/*.component
+            build/release/**/*.app
+
+      - name: Install validators
+        run: |
+          set -e
+          curl -sL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_macOS.zip
+          unzip -q pluginval.zip
+          curl -sL -o clap-validator.tar.gz https://github.com/free-audio/clap-validator/releases/download/0.3.2/clap-validator-0.3.2-macos-universal.tar.gz
+          tar xzf clap-validator.tar.gz
+
+      - name: Validate VST3 (pluginval)
+        run: ./pluginval.app/Contents/MacOS/pluginval --strictness-level 5 --skip-gui-tests --validate build/release/out/MyPlugin.vst3
+
+      - name: Validate AudioUnit (auval + pluginval)
+        run: |
+          mkdir -p ~/Library/Audio/Plug-Ins/Components
+          cp -R build/release/out/MyPlugin.component ~/Library/Audio/Plug-Ins/Components/
+          killall -9 AudioComponentRegistrar 2>/dev/null || true
+          auval -v aufx mypl MPlg
+          ./pluginval.app/Contents/MacOS/pluginval --strictness-level 5 --skip-gui-tests --validate build/release/out/MyPlugin.component
+
+      - name: Validate CLAP (clap-validator)
+        run: ./binaries/clap-validator validate build/release/out/MyPlugin.clap
+
+      - name: CLI smoke test
+        run: |
+          ./build/release/out/MyPluginCli --info
+          ./build/release/out/MyPluginCli --benchmark --iterations 1000 --warmup 100
+
+  # ---------------------------------------------------------------------------
+  # Linux — VST3 / CLAP / App / CLI
+  # ---------------------------------------------------------------------------
+  linux:
+    name: Linux
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configure git auth for private dependencies
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git config --global --add url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "git@github.com:"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build ccache \
+            libasound2-dev libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - uses: hendrikmuhs/ccache-action@v1.2.23
+        with:
+          key: linux
+          max-size: 2G
+
+      - name: Configure
+        run: >-
+          cmake --preset release
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: cmake --build --preset release
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: MyPlugin-linux
+          if-no-files-found: ignore
+          path: |
+            build/release/**/*.vst3
+            build/release/**/*.clap
+            build/release/out/MyPlugin
+
+      # pluginval's VST3 host reports "0 types found" on Linux (a pluginval
+      # limitation - the same VST3 passes pluginval on macOS/Windows), so VST3
+      # is validated there. Here we validate CLAP.
+      - name: Install validators
+        run: |
+          set -e
+          curl -sL -o clap-validator.tar.gz https://github.com/free-audio/clap-validator/releases/download/0.3.2/clap-validator-0.3.2-ubuntu-18.04.tar.gz
+          tar xzf clap-validator.tar.gz
+          chmod +x clap-validator
+
+      - name: Validate CLAP (clap-validator)
+        run: ./clap-validator validate build/release/out/MyPlugin.clap
+
+      - name: CLI smoke test
+        run: |
+          ./build/release/out/MyPluginCli --info
+          ./build/release/out/MyPluginCli --benchmark --iterations 1000 --warmup 100
+
+  # ---------------------------------------------------------------------------
+  # Windows — VST3 / CLAP / App
+  # ---------------------------------------------------------------------------
+  windows:
+    name: Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configure git auth for private dependencies
+        shell: bash
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git config --global --add url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "git@github.com:"
+
+      # MSVC env so the Ninja generator finds cl.exe. Ninja + sccache gives
+      # cross-run compiler caching, which the VS/MSBuild generator can't use.
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      - uses: hendrikmuhs/ccache-action@v1.2.23
+        with:
+          key: windows
+          variant: sccache
+          max-size: 2G
+
+      - name: Configure
+        run: >-
+          cmake -B build/windows -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_C_COMPILER_LAUNCHER=sccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+
+      # Build the shippable formats. (The Python module fails to link under
+      # Ninja/MSVC - 'cannot open myplugin.exp'; it's validated on macOS.)
+      - name: Build
+        run: cmake --build build/windows --target MyPluginVST3 MyPluginClap MyPluginApp
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: MyPlugin-windows
+          if-no-files-found: ignore
+          path: |
+            build/windows/**/*.vst3
+            build/windows/**/*.clap
+            build/windows/**/MyPlugin.exe
+
+      - name: Install validators
+        shell: bash
+        run: |
+          set -e
+          curl -sL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip
+          unzip -q pluginval.zip
+          curl -sL -o clap-validator.zip https://github.com/free-audio/clap-validator/releases/download/0.3.2/clap-validator-0.3.2-windows.zip
+          unzip -q clap-validator.zip
+
+      - name: Validate VST3 (pluginval)
+        shell: bash
+        run: ./pluginval.exe --strictness-level 5 --skip-gui-tests --validate build/windows/out/MyPlugin.vst3
+
+      - name: Validate CLAP (clap-validator)
+        shell: bash
+        run: ./clap-validator.exe validate build/windows/out/MyPlugin.clap
+
+  # ---------------------------------------------------------------------------
+  # Windows ARM64 / ARM64EC — VST3 / CLAP
+  # Cross-compiled from the x64 runner with the default Visual Studio generator
+  # (-A <arch>). ARM64EC lets the plugin load into x64 hosts on ARM Windows.
+  # ---------------------------------------------------------------------------
+  windows-arm:
+    name: Windows ${{ matrix.arch }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [ARM64, ARM64EC]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configure git auth for private dependencies
+        shell: bash
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git config --global --add url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "git@github.com:"
+
+      - name: Configure
+        run: cmake -B build/win-${{ matrix.arch }} -A ${{ matrix.arch }}
+
+      - name: Build
+        run: cmake --build build/win-${{ matrix.arch }} --config Release --target MyPluginVST3 MyPluginClap
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: MyPlugin-windows-${{ matrix.arch }}
+          if-no-files-found: ignore
+          path: |
+            build/win-${{ matrix.arch }}/**/*.vst3
+            build/win-${{ matrix.arch }}/**/*.clap
+
+  # ---------------------------------------------------------------------------
+  # AUv3 app extension (macOS, Xcode generator)
+  # ---------------------------------------------------------------------------
+  auv3:
+    name: AUv3 (macOS)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configure git auth for private dependencies
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git config --global --add url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "git@github.com:"
+
+      - name: Configure
+        run: cmake --preset xcode
+
+      - name: Build
+        run: >-
+          xcodebuild -project build/xcode/MyPlugin.xcodeproj
+          -scheme ALL_BUILD
+          -destination 'generic/platform=macOS'
+          CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+          build
+
+  # ---------------------------------------------------------------------------
+  # iOS AUv3 app extension (Xcode generator). Only AUv3 applies on iOS, so the
+  # template builds just that target there (no desktop formats / code signing).
+  # ---------------------------------------------------------------------------
+  ios:
+    name: iOS (AUv3)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configure git auth for private dependencies
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git config --global --add url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "git@github.com:"
+
+      - name: Configure
+        run: cmake --preset ios
+
+      - name: Build AUv3 extension
+        run: >-
+          xcodebuild -project build/ios/MyPlugin.xcodeproj
+          -target MyPluginAUv3Extension
+          -configuration Release
+          -destination 'generic/platform=iOS'
+          CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO
+          build
+
+  # ---------------------------------------------------------------------------
+  # visionOS AUv3 app extension (Xcode generator).
+  # ---------------------------------------------------------------------------
+  visionos:
+    name: visionOS (AUv3)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configure git auth for private dependencies
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git config --global --add url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "git@github.com:"
+
+      - name: Configure
+        run: cmake --preset visionos
+
+      - name: Build AUv3 extension
+        run: >-
+          xcodebuild -project build/visionos/MyPlugin.xcodeproj
+          -target MyPluginAUv3Extension
+          -configuration Release
+          -destination 'generic/platform=visionOS'
+          CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO
+          build
+
+  # ---------------------------------------------------------------------------
+  # WebAssembly (WCLAP) — the plugin compiled to run in the browser
+  # ---------------------------------------------------------------------------
+  wasm:
+    name: WebAssembly
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configure git auth for private dependencies
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git config --global --add url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "git@github.com:"
+
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v16
+        with:
+          version: 3.1.51
+          actions-cache-folder: emsdk-cache
+
+      - name: Install Ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build ccache
+
+      - uses: hendrikmuhs/ccache-action@v1.2.23
+        with:
+          key: wasm
+          max-size: 2G
+
+      - name: Configure
+        run: >-
+          emcmake cmake -B build/wasm -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DMPLUG_BUILD_WCLAP=ON
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: cmake --build build/wasm
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: MyPlugin-wasm
+          if-no-files-found: ignore
+          path: |
+            build/wasm/**/*.wclap
+            build/wasm/**/*.wasm
