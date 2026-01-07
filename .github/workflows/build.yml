@@ -1,0 +1,136 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+  pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # macOS — VST3 / AUv2 / CLAP / App / CLI
+  # ---------------------------------------------------------------------------
+  macos:
+    name: macOS
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      # MPlug (and its mcp-ext-apps submodule) is fetched over git. Rewrite both
+      # the https and git@ forms to use the PAT so private deps and ssh-style
+      # submodules clone without SSH keys.
+      - name: Configure git auth for private dependencies
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git config --global url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "git@github.com:"
+
+      - name: Install dependencies
+        run: brew install ninja ccache
+
+      - uses: hendrikmuhs/ccache-action@v1
+        with:
+          key: macos
+
+      - name: Configure
+        run: >-
+          cmake --preset release
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DCMAKE_OBJC_COMPILER_LAUNCHER=ccache
+          -DCMAKE_OBJCXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: cmake --build --preset release
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyPlugin-macos
+          if-no-files-found: ignore
+          path: |
+            build/release/**/*.vst3
+            build/release/**/*.clap
+            build/release/**/*.component
+            build/release/**/*.app
+
+  # ---------------------------------------------------------------------------
+  # Linux — VST3 / CLAP / App / CLI
+  # ---------------------------------------------------------------------------
+  linux:
+    name: Linux
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure git auth for private dependencies
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git config --global url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "git@github.com:"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build ccache \
+            libasound2-dev libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - uses: hendrikmuhs/ccache-action@v1
+        with:
+          key: linux
+
+      - name: Configure
+        run: >-
+          cmake --preset release
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: cmake --build --preset release
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyPlugin-linux
+          if-no-files-found: ignore
+          path: |
+            build/release/**/*.vst3
+            build/release/**/*.clap
+
+  # ---------------------------------------------------------------------------
+  # Windows — VST3 / CLAP / App / CLI
+  # ---------------------------------------------------------------------------
+  windows:
+    name: Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure git auth for private dependencies
+        shell: bash
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git config --global url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "git@github.com:"
+
+      - name: Configure
+        run: cmake --preset windows-x64-release
+
+      - name: Build
+        run: cmake --build --preset windows-x64-release
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyPlugin-windows
+          if-no-files-found: ignore
+          path: |
+            build/windows-x64-release/**/*.vst3
+            build/windows-x64-release/**/*.clap
