@@ -40,6 +40,7 @@ jobs:
       - uses: hendrikmuhs/ccache-action@v1
         with:
           key: macos
+          max-size: 2G
 
       - name: Configure
         run: >-
@@ -86,6 +87,7 @@ jobs:
       - uses: hendrikmuhs/ccache-action@v1
         with:
           key: linux
+          max-size: 2G
 
       - name: Configure
         run: >-
@@ -121,13 +123,25 @@ jobs:
           git config --global url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "https://github.com/"
           git config --global --add url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "git@github.com:"
 
-      # Use CMake's default generator so it picks whatever Visual Studio the
-      # runner image ships (currently VS 2026) rather than a hardcoded version.
+      # MSVC env so the Ninja generator finds cl.exe. Ninja + sccache gives
+      # cross-run compiler caching, which the VS/MSBuild generator can't use.
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      - uses: hendrikmuhs/ccache-action@v1
+        with:
+          key: windows
+          variant: sccache
+          max-size: 2G
+
       - name: Configure
-        run: cmake -B build/windows -DCMAKE_BUILD_TYPE=Release
+        run: >-
+          cmake -B build/windows -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_C_COMPILER_LAUNCHER=sccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
 
       - name: Build
-        run: cmake --build build/windows --config Release
+        run: cmake --build build/windows
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
