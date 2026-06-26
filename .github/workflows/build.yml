@@ -120,11 +120,13 @@ jobs:
           git config --global url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "https://github.com/"
           git config --global url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "git@github.com:"
 
+      # Use CMake's default generator so it picks whatever Visual Studio the
+      # runner image ships (currently VS 2026) rather than a hardcoded version.
       - name: Configure
-        run: cmake --preset windows-x64-release
+        run: cmake -B build/windows -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
-        run: cmake --build --preset windows-x64-release
+        run: cmake --build build/windows --config Release
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -132,5 +134,5 @@ jobs:
           name: MyPlugin-windows
           if-no-files-found: ignore
           path: |
-            build/windows-x64-release/**/*.vst3
-            build/windows-x64-release/**/*.clap
+            build/windows/**/*.vst3
+            build/windows/**/*.clap
