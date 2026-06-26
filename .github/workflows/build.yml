@@ -104,6 +104,7 @@ jobs:
           path: |
             build/release/**/*.vst3
             build/release/**/*.clap
+            build/release/out/MyPlugin
 
   # ---------------------------------------------------------------------------
   # Windows — VST3 / CLAP / App
@@ -136,3 +137,4 @@ jobs:
           path: |
             build/windows/**/*.vst3
             build/windows/**/*.clap
+            build/windows/**/MyPlugin.exe
