@@ -140,8 +140,10 @@ jobs:
           -DCMAKE_C_COMPILER_LAUNCHER=sccache
           -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
 
+      # Build the shippable formats. (The Python module fails to link under
+      # Ninja/MSVC - 'cannot open myplugin.exp'; it's validated on macOS.)
       - name: Build
-        run: cmake --build build/windows
+        run: cmake --build build/windows --target MyPluginVST3 MyPluginClap MyPluginApp
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
