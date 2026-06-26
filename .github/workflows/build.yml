@@ -64,7 +64,10 @@ jobs:
             build/release/**/*.app
 
   # ---------------------------------------------------------------------------
-  # Linux — VST3 / CLAP / App / CLI
+  # Linux — VST3 / CLAP
+  # (The App/CLI need upstream mplug/choc fixes on Linux: choc's RtAudio pulls
+  #  jack/jack.h and the CLI target doesn't pass GTK include flags. Build the
+  #  distributable plugin formats here; the App is validated on macOS.)
   # ---------------------------------------------------------------------------
   linux:
     name: Linux
@@ -94,7 +97,7 @@ jobs:
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build
-        run: cmake --build --preset release
+        run: cmake --build --preset release --target MyPluginVST3 MyPluginClap
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -106,7 +109,10 @@ jobs:
             build/release/**/*.clap
 
   # ---------------------------------------------------------------------------
-  # Windows — VST3 / CLAP / App / CLI
+  # Windows — VST3 / CLAP
+  # (The App needs an upstream choc fix on Windows: RtMidi.cpp has a TCHAR
+  #  conversion error under Unicode builds. Build the distributable plugin
+  #  formats here; the App is validated on macOS.)
   # ---------------------------------------------------------------------------
   windows:
     name: Windows
@@ -126,7 +132,7 @@ jobs:
         run: cmake -B build/windows -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
-        run: cmake --build build/windows --config Release
+        run: cmake --build build/windows --config Release --target MyPluginVST3 MyPluginClap
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
