@@ -24,7 +24,7 @@ jobs:
     name: macOS
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # MPlug (and its mcp-ext-apps submodule) is fetched over git. Rewrite both
       # the https and git@ forms to use the PAT so private deps and ssh-style
@@ -64,16 +64,13 @@ jobs:
             build/release/**/*.app
 
   # ---------------------------------------------------------------------------
-  # Linux — VST3 / CLAP
-  # (The App/CLI need upstream mplug/choc fixes on Linux: choc's RtAudio pulls
-  #  jack/jack.h and the CLI target doesn't pass GTK include flags. Build the
-  #  distributable plugin formats here; the App is validated on macOS.)
+  # Linux — VST3 / CLAP / App / CLI
   # ---------------------------------------------------------------------------
   linux:
     name: Linux
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Configure git auth for private dependencies
         run: |
@@ -84,7 +81,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ninja-build ccache \
-            libasound2-dev libgtk-3-dev libwebkit2gtk-4.1-dev
+            libasound2-dev libjack-jackd2-dev libgtk-3-dev libwebkit2gtk-4.1-dev
 
       - uses: hendrikmuhs/ccache-action@v1
         with:
@@ -97,7 +94,7 @@ jobs:
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build
-        run: cmake --build --preset release --target MyPluginVST3 MyPluginClap
+        run: cmake --build --preset release
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -109,16 +106,13 @@ jobs:
             build/release/**/*.clap
 
   # ---------------------------------------------------------------------------
-  # Windows — VST3 / CLAP
-  # (The App needs an upstream choc fix on Windows: RtMidi.cpp has a TCHAR
-  #  conversion error under Unicode builds. Build the distributable plugin
-  #  formats here; the App is validated on macOS.)
+  # Windows — VST3 / CLAP / App
   # ---------------------------------------------------------------------------
   windows:
     name: Windows
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Configure git auth for private dependencies
         shell: bash
@@ -132,7 +126,7 @@ jobs:
         run: cmake -B build/windows -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
-        run: cmake --build build/windows --config Release --target MyPluginVST3 MyPluginClap
+        run: cmake --build build/windows --config Release
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
