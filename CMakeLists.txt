@@ -59,9 +59,12 @@ if(APPLE)
   set(MY_PLUGIN_EDITOR_LIBS ${COCOA_FRAMEWORK} ${WEBKIT_FRAMEWORK})
 elseif(WIN32)
   set(MY_PLUGIN_EDITOR_SOURCES src/my_plugin_editor_win.cpp)
-  # ole32 for COM (choc's WebView2 backend calls CoInitialize). choc loads
-  # WebView2Loader.dll and shlwapi.dll dynamically, so no extra import libs.
-  set(MY_PLUGIN_EDITOR_LIBS ole32)
+  # No extra link libraries: choc's WebView2 backend calls CoInitialize (ole32)
+  # and loads WebView2Loader.dll / shlwapi.dll dynamically. ole32 is part of the
+  # MSVC default library set, so it resolves without being named explicitly.
+  # (Passing LINK_LIBRARIES here also currently trips an mplug_add_plugin bug
+  # that links the Apple-only AUv2 target on non-Apple platforms.)
+  set(MY_PLUGIN_EDITOR_LIBS)
 else()
   set(MY_PLUGIN_EDITOR_SOURCES src/my_plugin_editor_generic.cpp)
   set(MY_PLUGIN_EDITOR_LIBS)
