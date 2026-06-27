@@ -206,13 +206,16 @@ jobs:
           set -e
           curl -sL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip
           unzip -q pluginval.zip
+          curl -sL -o clap-validator.zip https://github.com/free-audio/clap-validator/releases/download/0.3.2/clap-validator-0.3.2-windows.zip
+          unzip -q clap-validator.zip
 
       - name: Validate VST3 (pluginval)
         shell: bash
         run: ./pluginval.exe --strictness-level 5 --skip-gui-tests --validate build/windows/out/MyPlugin.vst3
 
-      # CLAP is validated on macOS/Linux; clap-validator can't load the .clap
-      # here (os error 126 - dependency resolution under the validator).
+      - name: Validate CLAP (clap-validator)
+        shell: bash
+        run: ./clap-validator.exe validate build/windows/out/MyPlugin.clap
 
   # ---------------------------------------------------------------------------
   # AUv3 app extension (macOS, Xcode generator)
