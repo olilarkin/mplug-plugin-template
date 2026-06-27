@@ -5,6 +5,9 @@
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
+#ifndef NOMINMAX
+#define NOMINMAX  // keep windows.h min/max macros from clobbering choc's std::max()
+#endif
 #include <windows.h>
 
 #include <choc/gui/choc_WebView.h>
