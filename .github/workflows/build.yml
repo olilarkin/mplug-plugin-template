@@ -64,6 +64,33 @@ jobs:
             build/release/**/*.component
             build/release/**/*.app
 
+      - name: Install validators
+        run: |
+          set -e
+          curl -sL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_macOS.zip
+          unzip -q pluginval.zip
+          curl -sL -o clap-validator.tar.gz https://github.com/free-audio/clap-validator/releases/download/0.3.2/clap-validator-0.3.2-macos-universal.tar.gz
+          tar xzf clap-validator.tar.gz
+
+      - name: Validate VST3 (pluginval)
+        run: ./pluginval.app/Contents/MacOS/pluginval --strictness-level 5 --skip-gui-tests --validate build/release/out/MyPlugin.vst3
+
+      - name: Validate AudioUnit (auval + pluginval)
+        run: |
+          mkdir -p ~/Library/Audio/Plug-Ins/Components
+          cp -R build/release/out/MyPlugin.component ~/Library/Audio/Plug-Ins/Components/
+          killall -9 AudioComponentRegistrar 2>/dev/null || true
+          auval -v aufx mypl MPlg
+          ./pluginval.app/Contents/MacOS/pluginval --strictness-level 5 --skip-gui-tests --validate build/release/out/MyPlugin.component
+
+      - name: Validate CLAP (clap-validator)
+        run: ./clap-validator validate build/release/out/MyPlugin.clap
+
+      - name: CLI smoke test
+        run: |
+          ./build/release/out/MyPluginCli --info
+          ./build/release/out/MyPluginCli --benchmark --iterations 1000 --warmup 100
+
   # ---------------------------------------------------------------------------
   # Linux — VST3 / CLAP / App / CLI
   # ---------------------------------------------------------------------------
@@ -107,6 +134,28 @@ jobs:
             build/release/**/*.vst3
             build/release/**/*.clap
             build/release/out/MyPlugin
+
+      - name: Install validators
+        run: |
+          set -e
+          sudo apt-get install -y xvfb
+          curl -sL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Linux.zip
+          unzip -q pluginval.zip
+          chmod +x pluginval
+          curl -sL -o clap-validator.tar.gz https://github.com/free-audio/clap-validator/releases/download/0.3.2/clap-validator-0.3.2-ubuntu-18.04.tar.gz
+          tar xzf clap-validator.tar.gz
+          chmod +x clap-validator
+
+      - name: Validate VST3 (pluginval)
+        run: xvfb-run -a ./pluginval --strictness-level 5 --skip-gui-tests --validate build/release/out/MyPlugin.vst3
+
+      - name: Validate CLAP (clap-validator)
+        run: ./clap-validator validate build/release/out/MyPlugin.clap
+
+      - name: CLI smoke test
+        run: |
+          ./build/release/out/MyPluginCli --info
+          ./build/release/out/MyPluginCli --benchmark --iterations 1000 --warmup 100
 
   # ---------------------------------------------------------------------------
   # Windows — VST3 / CLAP / App
@@ -154,6 +203,23 @@ jobs:
             build/windows/**/*.vst3
             build/windows/**/*.clap
             build/windows/**/MyPlugin.exe
+
+      - name: Install validators
+        shell: bash
+        run: |
+          set -e
+          curl -sL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip
+          unzip -q pluginval.zip
+          curl -sL -o clap-validator.zip https://github.com/free-audio/clap-validator/releases/download/0.3.2/clap-validator-0.3.2-windows.zip
+          unzip -q clap-validator.zip
+
+      - name: Validate VST3 (pluginval)
+        shell: bash
+        run: ./pluginval.exe --strictness-level 5 --skip-gui-tests --validate build/windows/out/MyPlugin.vst3
+
+      - name: Validate CLAP (clap-validator)
+        shell: bash
+        run: ./clap-validator.exe validate build/windows/out/MyPlugin.clap
 
   # ---------------------------------------------------------------------------
   # AUv3 app extension (macOS, Xcode generator)
