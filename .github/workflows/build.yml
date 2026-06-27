@@ -352,13 +352,20 @@ jobs:
           actions-cache-folder: emsdk-cache
 
       - name: Install Ninja
-        run: sudo apt-get update && sudo apt-get install -y ninja-build
+        run: sudo apt-get update && sudo apt-get install -y ninja-build ccache
+
+      - uses: hendrikmuhs/ccache-action@v1.2.23
+        with:
+          key: wasm
+          max-size: 2G
 
       - name: Configure
         run: >-
           emcmake cmake -B build/wasm -G Ninja
           -DCMAKE_BUILD_TYPE=Release
           -DMPLUG_BUILD_WCLAP=ON
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build
         run: cmake --build build/wasm
