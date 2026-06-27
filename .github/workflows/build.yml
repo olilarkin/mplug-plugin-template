@@ -243,6 +243,59 @@ jobs:
           build
 
   # ---------------------------------------------------------------------------
+  # iOS AUv3 app extension (Xcode generator). Only AUv3 applies on iOS, so the
+  # template builds just that target there (no desktop formats / code signing).
+  # ---------------------------------------------------------------------------
+  ios:
+    name: iOS (AUv3)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configure git auth for private dependencies
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git config --global --add url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "git@github.com:"
+
+      - name: Configure
+        run: cmake -G Xcode -B build/ios -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_ARCHITECTURES=arm64
+
+      - name: Build AUv3 extension
+        run: >-
+          xcodebuild -project build/ios/MyPlugin.xcodeproj
+          -target MyPluginAUv3Extension
+          -configuration Release
+          -destination 'generic/platform=iOS'
+          CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO
+          build
+
+  # ---------------------------------------------------------------------------
+  # visionOS AUv3 app extension (Xcode generator).
+  # ---------------------------------------------------------------------------
+  visionos:
+    name: visionOS (AUv3)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configure git auth for private dependencies
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git config --global --add url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "git@github.com:"
+
+      - name: Configure
+        run: cmake -G Xcode -B build/visionos -DCMAKE_SYSTEM_NAME=visionOS -DCMAKE_OSX_ARCHITECTURES=arm64
+
+      - name: Build AUv3 extension
+        run: >-
+          xcodebuild -project build/visionos/MyPlugin.xcodeproj
+          -target MyPluginAUv3Extension
+          -configuration Release
+          -destination 'generic/platform=visionOS'
+          CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO
+          build
+
+  # ---------------------------------------------------------------------------
   # WebAssembly (WCLAP) — the plugin compiled to run in the browser
   # ---------------------------------------------------------------------------
   wasm:

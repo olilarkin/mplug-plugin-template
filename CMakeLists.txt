@@ -48,7 +48,30 @@ FetchContent_MakeAvailable(mplug)
 # their generic parameter UI). The standalone App provides the full webview UI on
 # all three platforms.
 # ----------------------------------------------------------------------------
-if(NOT EMSCRIPTEN)
+# iOS / visionOS (and their simulators) only support the AUv3 app-extension
+# format; the desktop formats (App/VST3/CLI/...) can't configure there.
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS" OR CMAKE_SYSTEM_NAME STREQUAL "visionOS")
+  set(MY_PLUGIN_APPLE_EMBEDDED TRUE)
+endif()
+
+if(MY_PLUGIN_APPLE_EMBEDDED)
+  # ---- iOS / visionOS: AUv3 app extension only (requires -G Xcode) ----
+  include(MPlugAUv3)
+
+  mplug_add_auv3(MyPluginAUv3
+    PLUGIN_CLASS MyPlugin
+    PLUGIN_HEADER src/my_plugin.h
+    IDENTIFIER "com.example.myplugin"
+    SUBTYPE "mypl"
+    MANUFACTURER "MPlg"
+    TYPE "aufx"
+    VERSION "1.0.0"
+    DESCRIPTION "A simple gain plugin"
+    SOURCES src/my_plugin.cpp
+  )
+
+elseif(NOT EMSCRIPTEN)
+  # ---- Native desktop formats (macOS / Windows / Linux) ----
   # MPlug plugin macros (provides mplug_add_plugin). Included here so the native
   # VST3 SDK target isn't created for Emscripten/WCLAP builds.
   include(MPlugPlugin)
