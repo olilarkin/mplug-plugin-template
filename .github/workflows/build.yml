@@ -218,6 +218,42 @@ jobs:
         run: ./clap-validator.exe validate build/windows/out/MyPlugin.clap
 
   # ---------------------------------------------------------------------------
+  # Windows ARM64 / ARM64EC — VST3 / CLAP
+  # Cross-compiled from the x64 runner with the default Visual Studio generator
+  # (-A <arch>). ARM64EC lets the plugin load into x64 hosts on ARM Windows.
+  # ---------------------------------------------------------------------------
+  windows-arm:
+    name: Windows ${{ matrix.arch }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [ARM64, ARM64EC]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configure git auth for private dependencies
+        shell: bash
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git config --global --add url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "git@github.com:"
+
+      - name: Configure
+        run: cmake -B build/win-${{ matrix.arch }} -A ${{ matrix.arch }}
+
+      - name: Build
+        run: cmake --build build/win-${{ matrix.arch }} --config Release --target MyPluginVST3 MyPluginClap
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: MyPlugin-windows-${{ matrix.arch }}
+          if-no-files-found: ignore
+          path: |
+            build/win-${{ matrix.arch }}/**/*.vst3
+            build/win-${{ matrix.arch }}/**/*.clap
+
+  # ---------------------------------------------------------------------------
   # AUv3 app extension (macOS, Xcode generator)
   # ---------------------------------------------------------------------------
   auv3:
