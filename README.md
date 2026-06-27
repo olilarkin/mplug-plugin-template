@@ -104,5 +104,33 @@ Token (or GitHub App token) with read access to the MPlug repo. The workflow
 rewrites git URLs to use it when cloning dependencies. (If MPlug is public for
 you, the secret can be empty and CI will fetch it without auth.)
 
-> A tag-triggered release workflow (code signing, notarization, installers) is a
-> natural next step and intentionally not included yet.
+The build also runs validation: **pluginval** (VST3/AU), **auval** (AU),
+**clap-validator** (CLAP), and a CLI smoke test.
+
+## Releases (signed + notarized macOS)
+
+`.github/workflows/release.yml` runs on a version tag (`git tag v1.0.0 && git
+push --tags`). It builds the macOS plugins + app, **Developer ID** codesigns
+them with a hardened runtime, **notarizes** and **staples** a DMG, and attaches
+it to the GitHub Release.
+
+It needs these repository secrets (in addition to `MPLUG_CI_TOKEN`):
+
+| Secret | What it is |
+|---|---|
+| `DEVELOPER_ID_APPLICATION` | `Developer ID Application: NAME (TEAMID)` |
+| `BUILD_CERTIFICATE_BASE64` | base64 of your Developer ID Application `.p12` |
+| `P12_PASSWORD` | password for that `.p12` |
+| `KEYCHAIN_PASSWORD` | any string (temporary CI keychain password) |
+| `NOTARY_KEY_BASE64` | base64 of an App Store Connect API key (`.p8`) |
+| `NOTARY_KEY_ID` | the API key's Key ID |
+| `NOTARY_ISSUER_ID` | the API key's Issuer ID |
+
+Export the `.p12` from Keychain Access (`base64 -i cert.p12 | pbcopy`); create
+the API key at App Store Connect → Users and Access → Integrations (role
+Developer; `base64 -i AuthKey_XXXX.p8 | pbcopy`). The workflow header documents
+the Apple-ID-password alternative to the API key. The app's hardened-runtime
+entitlements live in `resources/entitlements.mac.plist`.
+
+Without a tag, the workflow can be run manually (`workflow_dispatch`) to sign +
+notarize and upload the DMG as a build artifact, without creating a release.
