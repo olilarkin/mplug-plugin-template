@@ -45,6 +45,24 @@ checkout of MPlug instead of cloning it:
 cmake --preset release -DFETCHCONTENT_SOURCE_DIR_MPLUG=/path/to/mplug
 ```
 
+### AUv3 (macOS / iOS / visionOS)
+
+The AudioUnit v3 app extension must be built with Xcode, so it uses CMake's
+Xcode generator. There's no checked-in `.xcodeproj` — CMake generates one. Open
+it in Xcode to develop, sign, and run the AUv3 on a device or simulator:
+
+```bash
+cmake --preset xcode      # macOS  -> build/xcode/MyPlugin.xcodeproj (AUv3 + desktop)
+cmake --preset ios        # iOS    -> build/ios/MyPlugin.xcodeproj
+cmake --preset visionos   # visionOS -> build/visionos/MyPlugin.xcodeproj
+open build/ios/MyPlugin.xcodeproj
+```
+
+The generated project has `…AUv3Framework`, `…AUv3Extension`, and `…AUv3App`
+(host) targets. Select the host-app scheme, set your Team in Signing &
+Capabilities, and Run. On iOS/visionOS only the AUv3 is built (the desktop
+formats don't apply there). CI builds these unsigned on every push.
+
 ### Requirements
 
 - CMake 3.21+, a C++20 compiler, Git

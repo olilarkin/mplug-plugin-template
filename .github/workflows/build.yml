@@ -232,11 +232,11 @@ jobs:
           git config --global --add url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "git@github.com:"
 
       - name: Configure
-        run: cmake -G Xcode -B build-xcode -DMPLUG_BUILD_AUV3=ON
+        run: cmake --preset xcode
 
       - name: Build
         run: >-
-          xcodebuild -project build-xcode/MyPlugin.xcodeproj
+          xcodebuild -project build/xcode/MyPlugin.xcodeproj
           -scheme ALL_BUILD
           -destination 'generic/platform=macOS'
           CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
@@ -258,7 +258,7 @@ jobs:
           git config --global --add url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "git@github.com:"
 
       - name: Configure
-        run: cmake -G Xcode -B build/ios -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_ARCHITECTURES=arm64
+        run: cmake --preset ios
 
       - name: Build AUv3 extension
         run: >-
@@ -284,7 +284,7 @@ jobs:
           git config --global --add url."https://x-access-token:${{ secrets.MPLUG_CI_TOKEN }}@github.com/".insteadOf "git@github.com:"
 
       - name: Configure
-        run: cmake -G Xcode -B build/visionos -DCMAKE_SYSTEM_NAME=visionOS -DCMAKE_OSX_ARCHITECTURES=arm64
+        run: cmake --preset visionos
 
       - name: Build AUv3 extension
         run: >-
