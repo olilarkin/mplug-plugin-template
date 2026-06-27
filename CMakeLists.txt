@@ -38,24 +38,21 @@ set(MPLUG_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 
 FetchContent_MakeAvailable(mplug)
 
-# Include the MPlug plugin macros (provides mplug_add_plugin)
-include(MPlugPlugin)
-
-# ----------------------------------------------------------------------------
-# Platform-specific editor sources
-#
-# The plugin GUI is a CHOC WebView (HTML/JS/CSS). Embedding the webview into a
-# plugin host's parent window is currently implemented for macOS only; the
-# Windows/Linux stubs return nullptr so hosts fall back to their generic
-# parameter UI. The standalone App provides a full cross-platform webview UI on
-# all three platforms regardless.
-# ----------------------------------------------------------------------------
 # ----------------------------------------------------------------------------
 # Native plugin formats (skipped when building WebAssembly/WCLAP via Emscripten).
 # Produces: MyPluginClap, MyPluginVST3, MyPluginAUv2 (macOS), MyPluginApp,
 #           MyPluginCli, MyPluginPython
+#
+# The plugin GUI is a CHOC WebView. Embedding it into a plugin host's window is
+# implemented for macOS only; the Windows/Linux stubs return nullptr (hosts show
+# their generic parameter UI). The standalone App provides the full webview UI on
+# all three platforms.
 # ----------------------------------------------------------------------------
 if(NOT EMSCRIPTEN)
+  # MPlug plugin macros (provides mplug_add_plugin). Included here so the native
+  # VST3 SDK target isn't created for Emscripten/WCLAP builds.
+  include(MPlugPlugin)
+
   if(APPLE)
     set(MY_PLUGIN_EDITOR_SOURCES src/my_plugin_editor_mac.mm)
     find_library(COCOA_FRAMEWORK Cocoa REQUIRED)
