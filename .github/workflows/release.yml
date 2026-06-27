@@ -31,6 +31,10 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
+# Allow the built-in GITHUB_TOKEN to create the Release and upload assets.
+permissions:
+  contents: write
+
 jobs:
   macos:
     name: macOS (signed + notarized)
