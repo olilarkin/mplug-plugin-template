@@ -80,7 +80,8 @@
       "description": "Generates build/xcode/MyPlugin.xcodeproj - open it in Xcode for AUv3 development",
       "inherits": "apple-xcode-base",
       "cacheVariables": {
-        "MPLUG_BUILD_AUV3": "ON"
+        "MPLUG_BUILD_AUV3": "ON",
+        "CMAKE_OSX_ARCHITECTURES": "arm64;x86_64"
       }
     },
     {
