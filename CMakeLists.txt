@@ -50,39 +50,63 @@ include(MPlugPlugin)
 # parameter UI. The standalone App provides a full cross-platform webview UI on
 # all three platforms regardless.
 # ----------------------------------------------------------------------------
-if(APPLE)
-  set(MY_PLUGIN_EDITOR_SOURCES src/my_plugin_editor_mac.mm)
-  find_library(COCOA_FRAMEWORK Cocoa REQUIRED)
-  find_library(WEBKIT_FRAMEWORK WebKit REQUIRED)
-  set(MY_PLUGIN_EDITOR_LIBS ${COCOA_FRAMEWORK} ${WEBKIT_FRAMEWORK})
-elseif(WIN32)
-  set(MY_PLUGIN_EDITOR_SOURCES src/my_plugin_editor_win.cpp)
-  set(MY_PLUGIN_EDITOR_LIBS)
-else()
-  set(MY_PLUGIN_EDITOR_SOURCES src/my_plugin_editor_generic.cpp)
-  set(MY_PLUGIN_EDITOR_LIBS)
-endif()
-
 # ----------------------------------------------------------------------------
-# Build all plugin formats from a single definition.
+# Native plugin formats (skipped when building WebAssembly/WCLAP via Emscripten).
 # Produces: MyPluginClap, MyPluginVST3, MyPluginAUv2 (macOS), MyPluginApp,
 #           MyPluginCli, MyPluginPython
 # ----------------------------------------------------------------------------
-mplug_add_plugin(MyPlugin
-  PLUGIN_CLASS MyPlugin
-  PLUGIN_HEADER src/my_plugin.h
-  PLUGIN_ID "com.example.myplugin"
-  AU_SUBTYPE "mypl"
-  AU_TYPE "aufx"
-  CLAP_DESCRIPTION "A simple gain plugin"
-  CLAP_FEATURES "audio-effect" "utility" "stereo"
-  VST3_CATEGORY "Fx"
-  APP_NAME "MyPlugin"
-  SOURCES
-    src/my_plugin.h
-    src/my_plugin.cpp
-  EDITOR_SOURCES
-    ${MY_PLUGIN_EDITOR_SOURCES}
-  LINK_LIBRARIES
-    ${MY_PLUGIN_EDITOR_LIBS}
-)
+if(NOT EMSCRIPTEN)
+  if(APPLE)
+    set(MY_PLUGIN_EDITOR_SOURCES src/my_plugin_editor_mac.mm)
+    find_library(COCOA_FRAMEWORK Cocoa REQUIRED)
+    find_library(WEBKIT_FRAMEWORK WebKit REQUIRED)
+    set(MY_PLUGIN_EDITOR_LIBS ${COCOA_FRAMEWORK} ${WEBKIT_FRAMEWORK})
+  elseif(WIN32)
+    set(MY_PLUGIN_EDITOR_SOURCES src/my_plugin_editor_win.cpp)
+    set(MY_PLUGIN_EDITOR_LIBS)
+  else()
+    set(MY_PLUGIN_EDITOR_SOURCES src/my_plugin_editor_generic.cpp)
+    set(MY_PLUGIN_EDITOR_LIBS)
+  endif()
+
+  mplug_add_plugin(MyPlugin
+    PLUGIN_CLASS MyPlugin
+    PLUGIN_HEADER src/my_plugin.h
+    PLUGIN_ID "com.example.myplugin"
+    AU_SUBTYPE "mypl"
+    AU_TYPE "aufx"
+    CLAP_DESCRIPTION "A simple gain plugin"
+    CLAP_FEATURES "audio-effect" "utility" "stereo"
+    VST3_CATEGORY "Fx"
+    APP_NAME "MyPlugin"
+    SOURCES
+      src/my_plugin.h
+      src/my_plugin.cpp
+    EDITOR_SOURCES
+      ${MY_PLUGIN_EDITOR_SOURCES}
+    LINK_LIBRARIES
+      ${MY_PLUGIN_EDITOR_LIBS}
+  )
+endif()
+
+# ----------------------------------------------------------------------------
+# WebAssembly CLAP (WCLAP) — the plugin compiled to run in the browser.
+# Enable with -DMPLUG_BUILD_WCLAP=ON via the Emscripten toolchain (emcmake).
+# Headless: no editor sources.
+# ----------------------------------------------------------------------------
+if(MPLUG_BUILD_WCLAP)
+  include(MPlugWClap)
+
+  mplug_add_wclap(MyPluginWClap
+    PLUGIN_CLASS MyPlugin
+    PLUGIN_HEADER src/my_plugin.h
+    PLUGIN_ID "com.example.myplugin"
+    VENDOR "MPlug"
+    VERSION "1.0.0"
+    DESCRIPTION "A simple gain plugin"
+    FEATURES "audio-effect" "utility" "stereo"
+    SOURCES
+      src/my_plugin.h
+      src/my_plugin.cpp
+  )
+endif()
