@@ -45,10 +45,12 @@ include(MPlugPlugin)
 # Platform-specific editor sources
 #
 # The plugin GUI is a CHOC WebView (HTML/JS/CSS). Embedding the webview into a
-# plugin host's parent window is currently implemented for macOS only; the
-# Windows/Linux stubs return nullptr so hosts fall back to their generic
-# parameter UI. The standalone App provides a full cross-platform webview UI on
-# all three platforms regardless.
+# plugin host's parent window is implemented for macOS (WKWebView) and Windows
+# (WebView2). The Linux stub returns nullptr so hosts fall back to their generic
+# parameter UI — WebKitGTK needs the plugin to bridge the host's run loop
+# (VST3 IRunLoop / CLAP posix-fd) into the GLib main context, which isn't wired
+# up yet. The standalone App provides a full cross-platform webview UI on all
+# three platforms regardless.
 # ----------------------------------------------------------------------------
 if(APPLE)
   set(MY_PLUGIN_EDITOR_SOURCES src/my_plugin_editor_mac.mm)
@@ -57,7 +59,9 @@ if(APPLE)
   set(MY_PLUGIN_EDITOR_LIBS ${COCOA_FRAMEWORK} ${WEBKIT_FRAMEWORK})
 elseif(WIN32)
   set(MY_PLUGIN_EDITOR_SOURCES src/my_plugin_editor_win.cpp)
-  set(MY_PLUGIN_EDITOR_LIBS)
+  # ole32 for COM (choc's WebView2 backend calls CoInitialize). choc loads
+  # WebView2Loader.dll and shlwapi.dll dynamically, so no extra import libs.
+  set(MY_PLUGIN_EDITOR_LIBS ole32)
 else()
   set(MY_PLUGIN_EDITOR_SOURCES src/my_plugin_editor_generic.cpp)
   set(MY_PLUGIN_EDITOR_LIBS)
