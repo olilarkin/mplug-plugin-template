@@ -45,7 +45,10 @@ include(FetchContent)
 
 FetchContent_Declare(mplug
   GIT_REPOSITORY https://github.com/olilarkin/mplug.git
-  GIT_TAG        main
+  # TODO: revert to "main" once the editorhost-param-sync branch (which adds
+  # mplug/mplug_editor_host.h, required by the bidirectional editor sync) is
+  # merged into mplug main.
+  GIT_TAG        editorhost-param-sync
   GIT_SHALLOW    TRUE
 )
 
