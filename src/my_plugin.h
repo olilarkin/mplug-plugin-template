@@ -2,6 +2,7 @@
 
 #include <mplug/mplug.h>
 #include <mplug/mplug_dsp.h>
+#include <mplug/mplug_editor_host.h>
 
 #include <algorithm>
 #include <atomic>
@@ -63,6 +64,13 @@ public:
 
   void* createEditor(void* parentView, mplug::WindowType windowType);
   void destroyEditor();
+
+  // Optional hook: the format wrapper hands us an upward channel to the host
+  // just before createEditor(). The editor uses it to record parameter gestures
+  // and to receive host-originated parameter changes. Wrappers that don't
+  // support it never call this, leaving mEditorHost null (editor falls back to
+  // direct setParameterValue — audio updates, no automation).
+  void setEditorHost(mplug::EditorHost* host) { mEditorHost = host; }
 
   // --- Lifecycle -------------------------------------------------------------
   void prepare(double sampleRate, int maxBlockSize)
@@ -136,6 +144,10 @@ private:
 
   // Opaque, platform-specific editor handle (managed in the editor sources).
   void* mEditorView = nullptr;
+
+  // Upward channel to the host, supplied by the wrapper via setEditorHost().
+  // Null when the active format/wrapper doesn't provide one.
+  mplug::EditorHost* mEditorHost = nullptr;
 };
 
 // Verify the plugin satisfies the MPlug Plugin concept at compile time.
