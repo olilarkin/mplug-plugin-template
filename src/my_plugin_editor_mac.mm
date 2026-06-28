@@ -8,136 +8,14 @@
 #include <choc/gui/choc_MessageLoop.h>
 #include <choc/containers/choc_Value.h>
 
+// Generated from resources/web/editor.html at configure time (see CMakeLists.txt).
+// Provides std::string myplugin::editorHTML().
+#include "my_plugin_editor_html.h"
+
 #include <array>
 #include <memory>
 #include <sstream>
 #include <string>
-
-namespace
-{
-
-// Self-contained editor UI. HTML/CSS/JS are embedded as a string — the
-// cross-platform-safe approach (no resource files to bundle into each format).
-//
-// Parameter sync is bidirectional:
-//   * UI -> host: a drag is bracketed by beginGesture/endGesture (so the host
-//     records clean automation) with setParameter for each value change.
-//   * host -> UI: onParameterChange() updates the control WITHOUT firing
-//     setParameter — programmatically assigning slider.value emits no 'input'
-//     event, so host-originated updates can't bounce back as UI edits.
-std::string generateEditorHTML()
-{
-  return R"HTML(<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #1e1e2e; color: #cdd6f4;
-      height: 100vh; display: flex; flex-direction: column;
-      align-items: center; justify-content: center; gap: 20px; user-select: none;
-    }
-    h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.5px; }
-    .readout { font-size: 40px; font-weight: 700; color: #89b4fa; font-variant-numeric: tabular-nums; }
-    input[type="range"] {
-      -webkit-appearance: none; width: 280px; height: 6px;
-      background: #313244; border-radius: 3px; outline: none;
-    }
-    input[type="range"]::-webkit-slider-thumb {
-      -webkit-appearance: none; width: 20px; height: 20px;
-      background: #89b4fa; border-radius: 50%; cursor: pointer;
-    }
-  </style>
-</head>
-<body>
-  <h1>GAIN</h1>
-  <div class="readout" id="readout">0.0 dB</div>
-  <input type="range" id="gain" min="-60" max="12" step="0.1" value="0">
-  <script>
-    const PARAM = 0;
-    const slider = document.getElementById('gain');
-    const readout = document.getElementById('readout');
-
-    let gestureActive = false;
-    let idleTimer = null;
-
-    // Coalesce value sends to one per animation frame (latest value only). The
-    // JS->C++ bridge does a round-trip per call; an uncoalesced drag floods it
-    // and the host sees changes late. We render locally every frame regardless.
-    let pendingValue = null;
-    let rafId = null;
-
-    function flushPending() {
-      rafId = null;
-      if (pendingValue !== null) {
-        setParameter(PARAM, pendingValue);   // -> C++: value change
-        pendingValue = null;
-      }
-    }
-
-    function render(db) {
-      readout.textContent = db.toFixed(1) + ' dB';
-    }
-
-    // host -> UI. Update the control only; never call setParameter (assigning
-    // slider.value does NOT fire 'input', so there's no feedback loop). Ignore
-    // updates mid-drag so we don't fight the user's pointer.
-    window.onParameterChange = function(index, value) {
-      if (index !== PARAM || gestureActive) return;
-      slider.value = value;
-      render(value);
-    };
-
-    function beginIfNeeded() {
-      if (!gestureActive) {
-        gestureActive = true;
-        beginGesture(PARAM);            // -> C++: host records gesture start
-      }
-    }
-
-    function endIfNeeded() {
-      if (idleTimer !== null) { clearTimeout(idleTimer); idleTimer = null; }
-      if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
-      flushPending();                   // make sure the host gets the final value
-      if (gestureActive) {
-        gestureActive = false;
-        endGesture(PARAM);              // -> C++: host records gesture end
-      }
-    }
-
-    // Lazy-begin on first 'input' covers keyboard/wheel (no pointerdown);
-    // pointerdown covers the common drag case.
-    slider.addEventListener('pointerdown', beginIfNeeded);
-
-    slider.addEventListener('input', () => {
-      const db = parseFloat(slider.value);
-      beginIfNeeded();
-      render(db);                       // instant local readout
-      pendingValue = db;                // coalesce: send latest once per frame
-      if (rafId === null) rafId = requestAnimationFrame(flushPending);
-
-      // Safety net: end the gesture if a pointerup/change never arrives
-      // (e.g. focus loss), so the host doesn't get stuck in write mode.
-      if (idleTimer !== null) clearTimeout(idleTimer);
-      idleTimer = setTimeout(endIfNeeded, 250);
-    });
-
-    slider.addEventListener('pointerup', endIfNeeded);
-    slider.addEventListener('change', endIfNeeded);
-
-    // Pull the current value from the plugin on load.
-    getParameter(PARAM).then((db) => {
-      slider.value = db;
-      render(db);
-    });
-  </script>
-</body>
-</html>)HTML";
-}
-
-}  // namespace
 
 // Per-instance editor storage.
 struct MyPluginEditor
@@ -232,7 +110,7 @@ void* MyPlugin::createEditor(void* parentView, mplug::WindowType windowType)
       return choc::value::createFloat64(getParameterValue(index));
     });
 
-    editor->webView->setHTML(generateEditorHTML());
+    editor->webView->setHTML(myplugin::editorHTML());
 
     // host -> UI: drain parameter changes (automation, generic UI, preset
     // recall) on the message thread and push them to the WebView.

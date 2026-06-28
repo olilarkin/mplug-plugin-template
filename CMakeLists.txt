@@ -11,6 +11,23 @@ if(APPLE)
   enable_language(OBJCXX)
 endif()
 
+# Default macOS build architecture (desktop only — iOS/visionOS set their own):
+#   * CI (the CI env var is set, e.g. on GitHub Actions) → universal arm64;x86_64
+#     so released artifacts run on both Apple Silicon and Intel.
+#   * Local dev → just the host arch, for faster builds and smaller binaries.
+# Pass -DCMAKE_OSX_ARCHITECTURES=... explicitly to override either default.
+if(APPLE AND NOT CMAKE_OSX_ARCHITECTURES
+   AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS"
+   AND NOT CMAKE_SYSTEM_NAME STREQUAL "visionOS")
+  if(DEFINED ENV{CI})
+    set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64")
+  else()
+    set(CMAKE_OSX_ARCHITECTURES "${CMAKE_HOST_SYSTEM_PROCESSOR}")
+  endif()
+  message(STATUS "macOS architectures: ${CMAKE_OSX_ARCHITECTURES} "
+                 "(override with -DCMAKE_OSX_ARCHITECTURES=...)")
+endif()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -44,9 +61,13 @@ FetchContent_MakeAvailable(mplug)
 #           MyPluginCli, MyPluginPython
 #
 # The plugin GUI is a CHOC WebView. Embedding it into a plugin host's window is
-# implemented for macOS only; the Windows/Linux stubs return nullptr (hosts show
-# their generic parameter UI). The standalone App provides the full webview UI on
-# all three platforms.
+# implemented for macOS (WKWebView) and Windows (WebView2); the Linux stub
+# returns nullptr (hosts show their generic parameter UI). The standalone App
+# provides the full webview UI on all three platforms.
+#
+# The GUI lives in resources/web/editor.html and is embedded into the binary at
+# configure time (see the editor-source section below) — a single cross-platform
+# source of truth, with no resource files to bundle into each plugin format.
 # ----------------------------------------------------------------------------
 # iOS / visionOS (and their simulators) only support the AUv3 app-extension
 # format; the desktop formats (App/VST3/CLI/...) can't configure there.
@@ -76,6 +97,32 @@ elseif(NOT EMSCRIPTEN)
   # VST3 SDK target isn't created for Emscripten/WCLAP builds.
   include(MPlugPlugin)
 
+  # Embed resources/web/editor.html into a generated header at configure time.
+  # The macOS and Windows editors #include "my_plugin_editor_html.h" and call
+  # myplugin::editorHTML(). Re-running embed on every edit is wired through
+  # CMAKE_CONFIGURE_DEPENDS, so saving the HTML triggers a re-configure (and thus
+  # a regenerated header) on the next build — no manual cmake step needed.
+  set(MY_PLUGIN_EDITOR_HTML     ${CMAKE_CURRENT_SOURCE_DIR}/resources/web/editor.html)
+  set(MY_PLUGIN_GENERATED_DIR   ${CMAKE_CURRENT_BINARY_DIR}/generated)
+  set(MY_PLUGIN_EDITOR_HTML_HDR ${MY_PLUGIN_GENERATED_DIR}/my_plugin_editor_html.h)
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    ${MY_PLUGIN_EDITOR_HTML}
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedWebResource.cmake)
+  file(MAKE_DIRECTORY ${MY_PLUGIN_GENERATED_DIR})
+  execute_process(
+    COMMAND ${CMAKE_COMMAND}
+            -DINPUT=${MY_PLUGIN_EDITOR_HTML}
+            -DOUTPUT=${MY_PLUGIN_EDITOR_HTML_HDR}
+            -DSYMBOL=editorHTML
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedWebResource.cmake
+    RESULT_VARIABLE MY_PLUGIN_EMBED_RESULT)
+  if(NOT MY_PLUGIN_EMBED_RESULT EQUAL 0)
+    message(FATAL_ERROR "Failed to embed ${MY_PLUGIN_EDITOR_HTML}")
+  endif()
+  # The generated header is reachable as #include "my_plugin_editor_html.h" from
+  # the editor sources compiled into every plugin target created below.
+  include_directories(${MY_PLUGIN_GENERATED_DIR})
+
   if(APPLE)
     set(MY_PLUGIN_EDITOR_SOURCES src/my_plugin_editor_mac.mm)
     find_library(COCOA_FRAMEWORK Cocoa REQUIRED)
@@ -83,6 +130,9 @@ elseif(NOT EMSCRIPTEN)
     set(MY_PLUGIN_EDITOR_LIBS ${COCOA_FRAMEWORK} ${WEBKIT_FRAMEWORK})
   elseif(WIN32)
     set(MY_PLUGIN_EDITOR_SOURCES src/my_plugin_editor_win.cpp)
+    # No extra link libraries: choc's WebView2 backend calls CoInitialize (ole32,
+    # part of the MSVC default library set) and loads WebView2Loader.dll /
+    # shlwapi.dll dynamically, so nothing needs naming explicitly here.
     set(MY_PLUGIN_EDITOR_LIBS)
   else()
     set(MY_PLUGIN_EDITOR_SOURCES src/my_plugin_editor_generic.cpp)
