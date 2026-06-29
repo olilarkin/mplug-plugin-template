@@ -87,8 +87,9 @@ formats don't apply there). CI builds these unsigned on every push.
 you'll actually need:
 
 - **Parameters** — a single automatable Gain parameter (auto-serialized into state).
-- **Editor** — a [CHOC](https://github.com/Tracktion/choc) WebView GUI
-  (HTML/CSS/JS) in `src/my_plugin_editor_mac.mm`.
+- **Editor** — a [CHOC](https://github.com/Tracktion/choc) WebView GUI. The
+  HTML/CSS/JS lives in `resources/web/editor.html` (a single cross-platform
+  source of truth) and is embedded into the binary at build time.
 - **Latency** — `latency()` reports the plugin's latency in samples. A gain has
   none, so it returns 0; it's wired up as plumbing so you can return a real
   count when you add lookahead/FFT.
@@ -97,19 +98,21 @@ you'll actually need:
 
 ### GUI / editor status
 
-The in-host WebView editor (embedding into a plugin host's window) is currently
-implemented for **macOS** only. On Windows and Linux, `createEditor()` returns
-`nullptr` (the host shows its generic parameter UI), while the **standalone App
-provides the full WebView UI on all three platforms**. The Windows/Linux stubs
-(`src/my_plugin_editor_win.cpp`, `src/my_plugin_editor_generic.cpp`) are where
-native in-host editors would go.
+The in-host WebView editor (embedding into a plugin host's window) is implemented
+for **macOS** (WKWebView, `src/my_plugin_editor_mac.mm`) and **Windows**
+(WebView2, `src/my_plugin_editor_win.cpp`) — both share the same UI and the same
+bidirectional host↔UI parameter sync. On Linux, `createEditor()` returns
+`nullptr` (the host shows its generic parameter UI) because WebKitGTK needs the
+host's run loop bridged into the GLib main context first; that's the open work in
+the `src/my_plugin_editor_generic.cpp` stub. The **standalone App provides the
+full WebView UI on all three platforms** regardless.
 
 ## Customizing
 
 1. Implement your DSP and parameters in `src/my_plugin.h`.
 2. Update metadata in `CMakeLists.txt` (`PLUGIN_ID`, `AU_SUBTYPE`, `AU_TYPE`,
    `CLAP_FEATURES`, `VST3_CATEGORY`, …) — or run `rename_plugin.py` first.
-3. Edit the editor HTML in `src/my_plugin_editor_mac.mm`.
+3. Edit the editor HTML/CSS/JS in `resources/web/editor.html`.
 
 ## Continuous integration
 

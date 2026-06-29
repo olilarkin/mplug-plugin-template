@@ -28,8 +28,7 @@
       "displayName": "Release",
       "inherits": "base",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_OSX_ARCHITECTURES": "arm64;x86_64"
+        "CMAKE_BUILD_TYPE": "Release"
       }
     },
     {
@@ -80,8 +79,7 @@
       "description": "Generates build/xcode/MyPlugin.xcodeproj - open it in Xcode for AUv3 development",
       "inherits": "apple-xcode-base",
       "cacheVariables": {
-        "MPLUG_BUILD_AUV3": "ON",
-        "CMAKE_OSX_ARCHITECTURES": "arm64;x86_64"
+        "MPLUG_BUILD_AUV3": "ON"
       }
     },
     {
