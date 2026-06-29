@@ -18,10 +18,35 @@ concurrency:
 
 jobs:
   # ---------------------------------------------------------------------------
+  # Guard — only run the build jobs once MPLUG_CI_TOKEN has been configured.
+  # A fresh repo created from this template has no secret, so every build job is
+  # skipped (the run goes green) instead of failing on the private mplug clone.
+  # Add the secret in Settings -> Secrets and variables -> Actions to enable CI.
+  # ---------------------------------------------------------------------------
+  guard:
+    name: Guard
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+    steps:
+      - id: check
+        env:
+          TOKEN: ${{ secrets.MPLUG_CI_TOKEN }}
+        run: |
+          if [ -n "$TOKEN" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::MPLUG_CI_TOKEN not set — skipping build jobs. Add the secret to enable CI."
+          fi
+
+  # ---------------------------------------------------------------------------
   # macOS — VST3 / AUv2 / CLAP / App / CLI
   # ---------------------------------------------------------------------------
   macos:
     name: macOS
+    needs: guard
+    if: needs.guard.outputs.enabled == 'true'
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v5
@@ -96,6 +121,8 @@ jobs:
   # ---------------------------------------------------------------------------
   linux:
     name: Linux
+    needs: guard
+    if: needs.guard.outputs.enabled == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
@@ -158,6 +185,8 @@ jobs:
   # ---------------------------------------------------------------------------
   windows:
     name: Windows
+    needs: guard
+    if: needs.guard.outputs.enabled == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
@@ -224,6 +253,8 @@ jobs:
   # ---------------------------------------------------------------------------
   windows-arm:
     name: Windows ${{ matrix.arch }}
+    needs: guard
+    if: needs.guard.outputs.enabled == 'true'
     runs-on: windows-latest
     strategy:
       fail-fast: false
@@ -258,6 +289,8 @@ jobs:
   # ---------------------------------------------------------------------------
   auv3:
     name: AUv3 (macOS)
+    needs: guard
+    if: needs.guard.outputs.enabled == 'true'
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v5
@@ -284,6 +317,8 @@ jobs:
   # ---------------------------------------------------------------------------
   ios:
     name: iOS (AUv3)
+    needs: guard
+    if: needs.guard.outputs.enabled == 'true'
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v5
@@ -310,6 +345,8 @@ jobs:
   # ---------------------------------------------------------------------------
   visionos:
     name: visionOS (AUv3)
+    needs: guard
+    if: needs.guard.outputs.enabled == 'true'
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v5
@@ -336,6 +373,8 @@ jobs:
   # ---------------------------------------------------------------------------
   wasm:
     name: WebAssembly
+    needs: guard
+    if: needs.guard.outputs.enabled == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
