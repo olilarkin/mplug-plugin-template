@@ -21,6 +21,8 @@ Arguments:
 Options:
   --id ID            Reverse-domain plugin id (default: com.<vendor>.<class>).
   --subtype CODE     4-character AudioUnit subtype (default: derived).
+  --name "Display"   Human-readable name shown in the host (default: the class
+                     name with spaces inserted at word boundaries).
   -h, --help         Show this help.
 """
 
@@ -33,6 +35,7 @@ OLD_CLASS = "MyPlugin"
 OLD_SNAKE = "my_plugin"
 OLD_ID = "com.example.myplugin"
 OLD_SUBTYPE = "mypl"
+OLD_NAME = "My Plugin"
 
 # Files/dirs we never touch.
 SKIP_DIRS = {".git", "build", "__pycache__"}
@@ -44,6 +47,12 @@ def camel_to_snake(name: str) -> str:
     s1 = re.sub(r"(.)([A-Z][a-z]+)", r"\1_\2", name)
     s1 = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", s1)
     return s1.lower()
+
+
+def camel_to_words(name: str) -> str:
+    s1 = re.sub(r"(.)([A-Z][a-z]+)", r"\1 \2", name)
+    s1 = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", s1)
+    return s1
 
 
 def derive_subtype(class_name: str) -> str:
@@ -59,6 +68,7 @@ def main() -> int:
     parser.add_argument("manufacturer", help='Vendor name, e.g. "Acme Audio"')
     parser.add_argument("--id", dest="plugin_id", default=None)
     parser.add_argument("--subtype", dest="subtype", default=None)
+    parser.add_argument("--name", dest="display_name", default=None)
     args = parser.parse_args()
 
     new_class = args.new_class
@@ -70,6 +80,7 @@ def main() -> int:
     vendor_slug = re.sub(r"[^a-z0-9]", "", args.manufacturer.lower())
     new_id = args.plugin_id or f"com.{vendor_slug}.{new_class.lower()}"
     new_subtype = args.subtype or derive_subtype(new_class)
+    new_display = args.display_name or camel_to_words(new_class)
 
     if len(new_subtype) != 4:
         print("error: --subtype must be exactly 4 characters", file=sys.stderr)
@@ -79,6 +90,7 @@ def main() -> int:
     replacements = [
         (OLD_ID, new_id),
         ('"' + OLD_SUBTYPE + '"', '"' + new_subtype + '"'),
+        ('"' + OLD_NAME + '"', '"' + new_display + '"'),
         (OLD_CLASS, new_class),
         (OLD_SNAKE, new_snake),
     ]
@@ -121,6 +133,7 @@ def main() -> int:
     print(f"Renamed project to '{new_class}'")
     print(f"  class      : {new_class}")
     print(f"  files base : {new_snake}")
+    print(f"  display    : {new_display}")
     print(f"  plugin id  : {new_id}")
     print(f"  AU subtype : {new_subtype}")
     print(f"  updated {changed_files} file(s), renamed {renamed_files} source file(s)")
