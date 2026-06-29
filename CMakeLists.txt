@@ -160,6 +160,43 @@ elseif(NOT EMSCRIPTEN)
     LINK_LIBRARIES
       ${MY_PLUGIN_EDITOR_LIBS}
   )
+
+  # --------------------------------------------------------------------------
+  # Ad-hoc code signing (macOS)
+  #
+  # Some hosts — notably Ableton Live — refuse to load unsigned VST3/CLAP/AU
+  # plugins on macOS. We ad-hoc sign every built bundle by default so freshly
+  # built plugins load without a manual `codesign` step.
+  #
+  #   * The default identity "-" is ad-hoc: no certificate required, no
+  #     Gatekeeper/notarization guarantees — enough for local development and
+  #     the host's load-time signature check.
+  #   * For distribution, the release workflow re-signs these bundles with a
+  #     Developer ID + hardened runtime (see .github/workflows/release.yml),
+  #     so this step is harmless there.
+  #
+  # Override the identity for real signing, or turn signing off entirely:
+  #   cmake -B build -DMYPLUGIN_CODESIGN_IDENTITY="Developer ID Application: ..."
+  #   cmake -B build -DMYPLUGIN_CODESIGN=OFF
+  # --------------------------------------------------------------------------
+  if(APPLE)
+    option(MYPLUGIN_CODESIGN "Code sign macOS bundles after build" ON)
+    set(MYPLUGIN_CODESIGN_IDENTITY "-" CACHE STRING
+        "codesign identity for the post-build signing step (\"-\" = ad-hoc)")
+
+    if(MYPLUGIN_CODESIGN)
+      foreach(_fmt VST3 AUv2 Clap App)
+        set(_tgt MyPlugin${_fmt})
+        if(TARGET ${_tgt})
+          add_custom_command(TARGET ${_tgt} POST_BUILD
+            COMMAND codesign --force --sign "${MYPLUGIN_CODESIGN_IDENTITY}"
+                    --timestamp=none "$<TARGET_BUNDLE_DIR:${_tgt}>"
+            COMMENT "Code signing ${_tgt} with identity '${MYPLUGIN_CODESIGN_IDENTITY}'"
+            VERBATIM)
+        endif()
+      endforeach()
+    endif()
+  endif()
 endif()
 
 # ----------------------------------------------------------------------------

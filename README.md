@@ -63,6 +63,27 @@ The generated project has `…AUv3Framework`, `…AUv3Extension`, and `…AUv3Ap
 Capabilities, and Run. On iOS/visionOS only the AUv3 is built (the desktop
 formats don't apply there). CI builds these unsigned on every push.
 
+### Code signing (macOS)
+
+Some hosts — notably **Ableton Live** — refuse to load unsigned VST3/CLAP/AU
+plugins on macOS. So every built bundle (VST3, AUv2, CLAP, App) is **ad-hoc
+code signed** after build by default, which is enough for hosts to load them
+locally. No certificate or Apple Developer account is required.
+
+To sign with a real identity, or to turn signing off:
+
+```bash
+# Developer ID (or any keychain identity) instead of ad-hoc
+cmake --preset release -DMYPLUGIN_CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
+
+# Disable post-build signing entirely
+cmake --preset release -DMYPLUGIN_CODESIGN=OFF
+```
+
+For distributed releases, the release workflow re-signs the bundles with a
+Developer ID + hardened runtime and notarizes them (see below), so this
+ad-hoc step is harmless there.
+
 ### Requirements
 
 - CMake 3.21+, a C++20 compiler, Git
