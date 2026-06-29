@@ -13,6 +13,7 @@
 #include "my_plugin_editor_html.h"
 
 #include <array>
+#include <locale>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -37,7 +38,11 @@ namespace
 // host -> UI: push a single parameter value into the WebView.
 void pushParameterToJS(MyPluginEditor& editor, std::size_t index, double value)
 {
+  // Format with the classic ("C") locale so a host that switched the global C++
+  // locale to one with a comma decimal separator can't corrupt the value — e.g.
+  // -12.3 becoming "-12,3", which JS reads as two arguments (wrong value).
   std::ostringstream js;
+  js.imbue(std::locale::classic());
   js << "if (window.onParameterChange) window.onParameterChange(" << index << ", " << value << ");";
   editor.webView->evaluateJavascript(js.str());
 }
